@@ -282,8 +282,8 @@
           let fileData = null;
           
           if (file) {
-            if (file.size > 1000000) {
-              alert("File too large! Max 1MB allowed.");
+            if (file.size > 10 * 1024 * 1024) {
+              alert("File too large! Max 10MB allowed.");
               return;
             }
             
