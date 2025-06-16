@@ -1,0 +1,121 @@
+import { useState, useEffect } from "react";
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, collection, addDoc, query, where, getDocs } from "firebase/firestore";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBLkq4PTR1Upm06Pp937ItLfGyjRB9XhDk",
+  authDomain: "study-69d83.firebaseapp.com",
+  projectId: "study-69d83",
+  storageBucket: "study-69d83.firebasestorage.app",
+  messagingSenderId: "153099536517",
+  appId: "1:153099536517:web:82db3d1dc1dc71737781ec",
+  measurementId: "G-DJGL84HXXM"
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+export default function StudentResumeHub() {
+  const [user, setUser] = useState(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [subject, setSubject] = useState("Math");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [documents, setDocuments] = useState([]);
+
+  useEffect(() => {
+    onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) fetchDocuments();
+    });
+  }, []);
+
+  const login = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      alert("Login failed: " + error.message);
+    }
+  };
+
+  const uploadDocument = async () => {
+    if (!title || !content) return alert("Title and content required.");
+    await addDoc(collection(db, "resumes"), {
+      userId: user.uid,
+      subject,
+      title,
+      content,
+      timestamp: Date.now()
+    });
+    setTitle("");
+    setContent("");
+    fetchDocuments();
+  };
+
+  const fetchDocuments = async () => {
+    const q = query(collection(db, "resumes"));
+    const querySnapshot = await getDocs(q);
+    const docs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    setDocuments(docs);
+  };
+
+  const filteredDocuments = documents.filter(doc =>
+    doc.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (subject === "All" || doc.subject === subject)
+  );
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <Card className="w-full max-w-sm">
+          <CardContent className="p-4 space-y-4">
+            <Input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+            <Input placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+            <Button onClick={login}>Login</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center space-x-4">
+        <select className="border rounded p-2" value={subject} onChange={e => setSubject(e.target.value)}>
+          <option>All</option>
+          <option>Math</option>
+          <option>Science</option>
+          <option>History</option>
+          <option>English</option>
+        </select>
+        <Input placeholder="Search titles..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+      </div>
+
+      <div className="space-y-2">
+        <Input placeholder="Document Title" value={title} onChange={e => setTitle(e.target.value)} />
+        <textarea className="w-full p-2 border rounded" rows={6} placeholder="Document Content" value={content} onChange={e => setContent(e.target.value)} />
+        <Button onClick={uploadDocument}>Upload</Button>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        {filteredDocuments.map(doc => (
+          <Card key={doc.id}>
+            <CardContent className="p-4">
+              <h3 className="text-lg font-semibold">{doc.title} ({doc.subject})</h3>
+              <p className="text-sm whitespace-pre-wrap">{doc.content}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
