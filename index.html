@@ -273,6 +273,11 @@
       searchInput.oninput = fetchAndRenderDocuments;
       subjectFilter.onchange = fetchAndRenderDocuments;
     };
+
+  document.getElementById('upload-file').addEventListener('change', function(e) {
+    const fileName = e.target.files[0] ? e.target.files[0].name : 'No file selected';
+    document.getElementById('file-name').textContent = fileName;
+  });
   </script>
 </head>
 <body class="bg-gray-50 min-h-screen p-4 font-sans">
