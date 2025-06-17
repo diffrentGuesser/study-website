@@ -146,7 +146,15 @@
   <!-- Firebase and App Scripts -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+    import { 
+      getAuth, 
+      signInWithEmailAndPassword, 
+      createUserWithEmailAndPassword, 
+      signInWithPopup, 
+      GoogleAuthProvider, 
+      onAuthStateChanged, 
+      signOut 
+    } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
     import { getFirestore, collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -162,7 +170,11 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const provider = new GoogleAuthProvider();
+    const googleProvider = new GoogleAuthProvider();
+
+    // Add Google scopes if needed
+    googleProvider.addScope('profile');
+    googleProvider.addScope('email');
 
     let user = null;
 
@@ -238,13 +250,33 @@
         }
       };
 
-      // Google sign-in
+      // Google sign-in - Fixed implementation
       googleBtn.onclick = async () => {
         try {
-          provider.setCustomParameters({ prompt: 'select_account' });
-          await signInWithPopup(auth, provider);
-        } catch (err) {
-          alert("Google sign-in failed: " + err.message);
+          // Force account selection every time
+          googleProvider.setCustomParameters({
+            prompt: 'select_account'
+          });
+          
+          const result = await signInWithPopup(auth, googleProvider);
+          // This gives you a Google Access Token. You can use it to access the Google API.
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          const token = credential.accessToken;
+          // The signed-in user info
+          const user = result.user;
+          
+          console.log("Google sign-in successful", user);
+        } catch (error) {
+          // Handle Errors here.
+          const errorCode = error.code;
+          const errorMessage = error.message;
+          // The email of the user's account used.
+          const email = error.customData?.email;
+          // The AuthCredential type that was used.
+          const credential = GoogleAuthProvider.credentialFromError(error);
+          
+          console.error("Google sign-in error", errorCode, errorMessage);
+          alert("Google sign-in failed: " + errorMessage);
         }
       };
 
