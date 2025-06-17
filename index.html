@@ -79,9 +79,9 @@
     <section id="doc-list" class="space-y-4"></section>
   </div>
 
-  <!-- Upload Section -->
+  <!-- Upload/Edit Section -->
   <div id="upload-section" class="hidden max-w-3xl mx-auto mt-10 bg-white p-6 rounded-lg shadow border border-gray-200">
-    <h2 class="text-2xl font-bold mb-4 text-blue-700">Upload New Document</h2>
+    <h2 id="upload-section-title" class="text-2xl font-bold mb-4 text-blue-700">Upload New Document</h2>
     
     <div class="space-y-4">
       <div>
@@ -115,9 +115,9 @@
       </div>
       
       <div>
-        <label for="upload-file" class="block font-medium text-gray-700 mb-1">Or upload file (max 1MB)</label>
+        <label for="upload-file" class="block font-medium text-gray-700 mb-1">Upload file</label>
         <div class="relative">
-          <input id="upload-file" type="file"
+          <input id="upload-file" type="file" accept="*/*"
             class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
           <div class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition inline-flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -127,7 +127,7 @@
           </div>
           <span id="file-name" class="ml-3 text-gray-700">No file selected</span>
         </div>
-        <p class="text-sm text-gray-500 mt-1">Supports: PDF, DOCX, TXT (≤1MB)</p>
+        <p class="text-sm text-gray-500 mt-1">Supports: Images (PNG, JPG, GIF), PDF, DOCX, PPTX, XLSX, TXT, ZIP, and more (≤10MB)</p>
       </div>
     </div>
 
@@ -140,6 +140,48 @@
         class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-6 rounded-lg transition">
         Cancel
       </button>
+      <button id="update-btn" class="hidden bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg transition">
+        Update
+      </button>
+    </div>
+  </div>
+
+  <!-- Document Preview Modal -->
+  <div id="preview-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-start mb-4">
+          <h3 id="preview-title" class="text-2xl font-bold text-gray-800"></h3>
+          <button id="close-preview" class="text-gray-500 hover:text-gray-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div class="flex flex-wrap gap-2 mb-4">
+          <span id="preview-subject" class="bg-blue-100 text-blue-800 px-3 py-1 rounded text-sm"></span>
+          <span id="preview-author" class="bg-gray-100 text-gray-800 px-3 py-1 rounded text-sm"></span>
+        </div>
+        
+        <div id="preview-content" class="mb-6 text-gray-700 whitespace-pre-wrap"></div>
+        
+        <div id="preview-file-section" class="mb-6 hidden">
+          <h4 class="font-medium text-gray-800 mb-2">Attached File:</h4>
+          <div id="preview-file-container" class="border border-gray-200 rounded-lg p-4">
+            <!-- File preview will be inserted here -->
+          </div>
+        </div>
+        
+        <div class="flex justify-end gap-2">
+          <button id="edit-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition hidden">
+            Edit
+          </button>
+          <button id="download-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition hidden">
+            Download File
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -155,7 +197,18 @@
       onAuthStateChanged, 
       signOut 
     } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      getDocs, 
+      query, 
+      orderBy, 
+      deleteDoc, 
+      doc,
+      updateDoc,
+      getDoc
+    } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBLkq4PTR1Upm06Pp937ItLfGyjRB9XhDk",
@@ -177,6 +230,7 @@
     googleProvider.addScope('email');
 
     let user = null;
+    let currentEditingDocId = null;
 
     // File to Base64 converter
     function fileToBase64(file) {
@@ -188,10 +242,52 @@
       });
     }
 
+    // Get file icon based on type
+    function getFileIcon(fileType) {
+      const icons = {
+        // Images
+        'image/png': '🖼️',
+        'image/jpeg': '🖼️',
+        'image/gif': '🖼️',
+        'image/webp': '🖼️',
+        'image/svg+xml': '🖼️',
+        
+        // Documents
+        'application/pdf': '📄',
+        'application/msword': '📝',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '📝',
+        'application/vnd.ms-powerpoint': '📊',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': '📊',
+        'application/vnd.ms-excel': '📊',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '📊',
+        'text/plain': '📄',
+        
+        // Archives
+        'application/zip': '🗄️',
+        'application/x-rar-compressed': '🗄️',
+        'application/x-7z-compressed': '🗄️',
+        
+        // Code
+        'text/html': '📄',
+        'text/css': '📄',
+        'text/javascript': '📄',
+        'application/json': '📄',
+        
+        // Audio/Video
+        'audio/mpeg': '🎵',
+        'audio/wav': '🎵',
+        'video/mp4': '🎬',
+        'video/webm': '🎬'
+      };
+      
+      return icons[fileType] || '📁'; // Default icon
+    }
+
     window.onload = () => {
       const loginSection = document.getElementById("login-section");
       const mainSection = document.getElementById("main-section");
       const uploadSection = document.getElementById("upload-section");
+      const previewModal = document.getElementById("preview-modal");
 
       const loginForm = document.getElementById("login-form");
       const registerBtn = document.getElementById("register-btn");
@@ -201,6 +297,8 @@
       const uploadBtn = document.getElementById("nav-upload-btn");
       const cancelUploadBtn = document.getElementById("cancel-upload-btn");
       const publishBtn = document.getElementById("publish-btn");
+      const updateBtn = document.getElementById("update-btn");
+      const uploadSectionTitle = document.getElementById("upload-section-title");
 
       const subjectSelect = document.getElementById("upload-subject");
       const titleInput = document.getElementById("upload-title");
@@ -210,6 +308,17 @@
       const searchInput = document.getElementById("search");
       const subjectFilter = document.getElementById("subject-filter");
       const docList = document.getElementById("doc-list");
+
+      // Preview modal elements
+      const closePreviewBtn = document.getElementById("close-preview");
+      const previewTitle = document.getElementById("preview-title");
+      const previewSubject = document.getElementById("preview-subject");
+      const previewAuthor = document.getElementById("preview-author");
+      const previewContent = document.getElementById("preview-content");
+      const previewFileSection = document.getElementById("preview-file-section");
+      const previewFileContainer = document.getElementById("preview-file-container");
+      const downloadBtn = document.getElementById("download-btn");
+      const editBtn = document.getElementById("edit-btn");
 
       // Auth state listener
       onAuthStateChanged(auth, async (currentUser) => {
@@ -287,6 +396,11 @@
 
       // Toggle upload form
       uploadBtn.onclick = () => {
+        currentEditingDocId = null;
+        uploadSectionTitle.textContent = "Upload New Document";
+        publishBtn.classList.remove("hidden");
+        updateBtn.classList.add("hidden");
+        clearUploadForm();
         mainSection.classList.add("hidden");
         uploadSection.classList.remove("hidden");
       };
@@ -347,6 +461,232 @@
         }
       };
 
+      // Update document
+      updateBtn.onclick = async () => {
+        const title = titleInput.value.trim();
+        const content = contentInput.value.trim();
+        const subject = subjectSelect.value;
+        const file = fileInput.files[0];
+
+        if (!title) {
+          alert("Title is required!");
+          return;
+        }
+
+        try {
+          // First get the current document to preserve existing file if no new file is uploaded
+          const docRef = doc(db, "resumes", currentEditingDocId);
+          const docSnap = await getDoc(docRef);
+          const existingData = docSnap.data();
+          
+          let fileData = existingData.file || null;
+          
+          if (file) {
+            if (file.size > 10 * 1024 * 1024) {
+              alert("File too large! Max 10MB allowed.");
+              return;
+            }
+            
+            fileData = {
+              name: file.name,
+              type: file.type,
+              base64: await fileToBase64(file)
+            };
+          }
+
+          await updateDoc(docRef, {
+            title,
+            content,
+            subject,
+            file: fileData,
+            timestamp: Date.now()
+          });
+
+          alert("Document updated successfully!");
+          clearUploadForm();
+          uploadSection.classList.add("hidden");
+          mainSection.classList.remove("hidden");
+          await fetchAndRenderDocuments();
+        } catch (err) {
+          console.error("Update error:", err);
+          alert("Update failed: " + err.message);
+        }
+      };
+
+      // Edit document
+      editBtn.onclick = async () => {
+        previewModal.classList.add("hidden");
+        
+        // Get the document data
+        const docRef = doc(db, "resumes", currentEditingDocId);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          
+          // Set form values
+          uploadSectionTitle.textContent = "Edit Document";
+          titleInput.value = data.title;
+          contentInput.value = data.content || "";
+          subjectSelect.value = data.subject;
+          
+          // Show existing file info if available
+          if (data.file) {
+            document.getElementById("file-name").textContent = data.file.name;
+          }
+          
+          // Show update button instead of publish
+          publishBtn.classList.add("hidden");
+          updateBtn.classList.remove("hidden");
+          
+          // Show the form
+          mainSection.classList.add("hidden");
+          uploadSection.classList.remove("hidden");
+        } else {
+          alert("Document not found!");
+        }
+      };
+
+      // Show document preview
+      function showDocumentPreview(data, docId) {
+        currentEditingDocId = docId;
+        previewTitle.textContent = data.title;
+        previewSubject.textContent = data.subject;
+        previewAuthor.textContent = `Uploaded by ${data.userEmail || "unknown"}`;
+        previewContent.textContent = data.content || "No additional content provided.";
+        
+        // Show edit button only if it's the user's document
+        if (data.userId === user?.uid) {
+          editBtn.classList.remove("hidden");
+        } else {
+          editBtn.classList.add("hidden");
+        }
+        
+        // Clear previous file preview
+        previewFileContainer.innerHTML = "";
+        previewFileSection.classList.add("hidden");
+        downloadBtn.classList.add("hidden");
+        
+        if (data.file) {
+          previewFileSection.classList.remove("hidden");
+          downloadBtn.classList.remove("hidden");
+          
+          // Set download button
+          downloadBtn.onclick = () => {
+            const link = document.createElement('a');
+            link.href = data.file.base64;
+            link.download = data.file.name;
+            link.click();
+          };
+          
+          // Show appropriate preview based on file type
+          if (data.file.type.startsWith('image/')) {
+            // Image preview
+            const img = document.createElement('img');
+            img.src = data.file.base64;
+            img.alt = data.file.name;
+            img.className = "max-w-full max-h-96 mx-auto";
+            previewFileContainer.appendChild(img);
+          } 
+          else if (data.file.type === "application/pdf") {
+            // PDF preview using embed
+            const embed = document.createElement('embed');
+            embed.src = data.file.base64;
+            embed.type = "application/pdf";
+            embed.className = "w-full h-96";
+            embed.setAttribute("aria-label", "PDF Preview");
+            previewFileContainer.appendChild(embed);
+          } 
+          else if (data.file.type.includes('presentation') || 
+                   data.file.type.includes('powerpoint')) {
+            // PowerPoint - show download button only
+            const message = document.createElement('div');
+            message.className = "text-center p-4";
+            message.innerHTML = `
+              <div class="text-5xl mb-2">${getFileIcon(data.file.type)}</div>
+              <p class="text-gray-700">PowerPoint preview not available. Please download to view.</p>
+              <p class="text-sm text-gray-500 mt-2">${data.file.name}</p>
+            `;
+            previewFileContainer.appendChild(message);
+          }
+          else if (data.file.type.includes('spreadsheet') || 
+                   data.file.type.includes('excel')) {
+            // Excel - show download button only
+            const message = document.createElement('div');
+            message.className = "text-center p-4";
+            message.innerHTML = `
+              <div class="text-5xl mb-2">${getFileIcon(data.file.type)}</div>
+              <p class="text-gray-700">Excel preview not available. Please download to view.</p>
+              <p class="text-sm text-gray-500 mt-2">${data.file.name}</p>
+            `;
+            previewFileContainer.appendChild(message);
+          }
+          else if (data.file.type.includes('word') || 
+                   data.file.type.includes('document')) {
+            // Word - show download button only
+            const message = document.createElement('div');
+            message.className = "text-center p-4";
+            message.innerHTML = `
+              <div class="text-5xl mb-2">${getFileIcon(data.file.type)}</div>
+              <p class="text-gray-700">Word document preview not available. Please download to view.</p>
+              <p class="text-sm text-gray-500 mt-2">${data.file.name}</p>
+            `;
+            previewFileContainer.appendChild(message);
+          } 
+          else if (data.file.type === "text/plain" || 
+                   data.file.type.startsWith('text/')) {
+            // Text - attempt to show content
+            try {
+              const base64Content = data.file.base64.split(',')[1];
+              const textContent = atob(base64Content);
+              const pre = document.createElement('pre');
+              pre.textContent = textContent;
+              pre.className = "whitespace-pre-wrap bg-gray-50 p-3 rounded text-gray-800 max-h-96 overflow-auto";
+              previewFileContainer.appendChild(pre);
+            } catch (e) {
+              const message = document.createElement('div');
+              message.className = "text-center p-4";
+              message.innerHTML = `
+                <div class="text-5xl mb-2">${getFileIcon(data.file.type)}</div>
+                <p class="text-gray-700">Text content could not be displayed. Please download to view.</p>
+                <p class="text-sm text-gray-500 mt-2">${data.file.name}</p>
+              `;
+              previewFileContainer.appendChild(message);
+            }
+          } 
+          else if (data.file.type.includes('zip') || 
+                   data.file.type.includes('compressed')) {
+            // Archive files
+            const message = document.createElement('div');
+            message.className = "text-center p-4";
+            message.innerHTML = `
+              <div class="text-5xl mb-2">${getFileIcon(data.file.type)}</div>
+              <p class="text-gray-700">Compressed archive. Please download to extract contents.</p>
+              <p class="text-sm text-gray-500 mt-2">${data.file.name}</p>
+            `;
+            previewFileContainer.appendChild(message);
+          }
+          else {
+            // Unsupported file type
+            const message = document.createElement('div');
+            message.className = "text-center p-4";
+            message.innerHTML = `
+              <div class="text-5xl mb-2">${getFileIcon(data.file.type)}</div>
+              <p class="text-gray-700">Preview not available for this file type. Please download to view.</p>
+              <p class="text-sm text-gray-500 mt-2">${data.file.name}</p>
+            `;
+            previewFileContainer.appendChild(message);
+          }
+        }
+        
+        previewModal.classList.remove("hidden");
+      }
+
+      // Close preview modal
+      closePreviewBtn.onclick = () => {
+        previewModal.classList.add("hidden");
+      };
+
       // Fetch and render documents
       async function fetchAndRenderDocuments() {
         const q = query(collection(db, "resumes"), orderBy("timestamp", "desc"));
@@ -367,14 +707,13 @@
 
           let fileSection = "";
           if (data.file) {
+            const fileIcon = getFileIcon(data.file.type);
             fileSection = `
-              <div class="mt-3">
+              <div class="mt-3 flex items-center">
+                <span class="mr-2">${fileIcon}</span>
                 <a href="${data.file.base64}" 
                    download="${data.file.name}"
                    class="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1 rounded inline-flex items-center text-sm">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                  </svg>
                   ${data.file.name}
                 </a>
               </div>
@@ -392,13 +731,14 @@
           }
 
           const card = document.createElement("div");
-          card.className = "bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow mb-4 border border-gray-100";
+          card.className = "bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow mb-4 border border-gray-100 cursor-pointer";
+          card.onclick = () => showDocumentPreview(data, docId);
           card.innerHTML = `
             <div class="flex justify-between items-start">
               <h3 class="text-xl font-semibold text-gray-800">${data.title}</h3>
               <span class="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">${data.subject}</span>
             </div>
-            ${data.content ? `<p class="mt-2 text-gray-700 whitespace-pre-wrap">${data.content}</p>` : ''}
+            ${data.content ? `<p class="mt-2 text-gray-700 whitespace-pre-wrap line-clamp-2">${data.content}</p>` : ''}
             ${fileSection}
             <div class="mt-3 flex justify-between items-center">
               <p class="text-sm text-gray-500">Uploaded by ${data.userEmail || "unknown"}</p>
